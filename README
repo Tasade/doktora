@@ -1,0 +1,38 @@
+# 🐑 Kuzu Takip Paneli
+
+Kırklareli İli Kıvırcık Koyun Irkı Halk Elinde Islahı Projesi — Ahmet Uçak kayıt verilerini temizleyip görselleştiren uygulama.
+
+## Klasör Yapısı
+
+```
+proje/
+├── data/
+│   └── Ahmet_Uçak_Kuzu_Listesi.csv   # Ham kayıt verisi
+├── scripts/
+│   ├── preprocess.py                  # Veri temizleme scripti
+│   └── temiz_veri.csv                 # Temizlenmiş çıktı (oluşturulur)
+├── streamlit_app/
+│   └── app.py                         # Görselleştirme uygulaması
+├── requirements.txt
+└── README.md
+```
+
+## Kurulum
+
+```bash
+pip install -r requirements.txt
+```
+
+## Kullanım
+
+### 1. Veriyi Temizle
+```bash
+python scripts/preprocess.py
+```
+`scripts/temiz_veri.csv` oluşturulur.
+
+### 2. Uygulamayı Çalıştır
+```bash
+streamlit run streamlit_app/app.py
+```
+Tarayıcınızda `http://localhost:8501` açılır.
