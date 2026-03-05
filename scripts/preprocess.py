@@ -1,55 +1,44 @@
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
-df = pd.read_csv("data/kuzu_listesi.csv", sep=";", engine="python")
+# Dosya yolları
+base_path = Path(__file__).resolve().parent.parent
 
-# header temizleme
-df.columns = df.iloc[3]
-df = df.drop([0,1,2,3]).reset_index(drop=True)
+raw_data = base_path / "data" / "Ahmet Uçak Kuzu Listesi.csv"
+clean_data = base_path / "scripts" / "kuzu_clean.csv"
 
-df.columns = [
-"sira_no",
-"kuzu_kupeno",
-"turkvet_no",
-"ana_kupeno",
-"dogum_tarihi",
-"cinsiyet",
-"dogum_tipi",
-"dogum_agirligi",
-"ay2_agirligi",
-"tartim_tarihi"
-]
+# Veri yükleme
+df = pd.read_csv(raw_data, sep=",", engine="python")
 
-# tarih dönüşümü
-df["dogum_tarihi"] = pd.to_datetime(df["dogum_tarihi"], dayfirst=True)
-df["tartim_tarihi"] = pd.to_datetime(df["tartim_tarihi"], dayfirst=True)
+# kolon isimlerini temizleme
+df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-# ağırlık temizleme
-df["dogum_agirligi"] = (
-    df["dogum_agirligi"]
-    .str.replace("kg","")
-    .str.replace(",",".")
-    .astype(float)
-)
+# tarihleri düzeltme
+df["doğum_tarihi"] = pd.to_datetime(df["doğum_tarihi"], errors="coerce")
+df["2._ay_tartım_tarihi"] = pd.to_datetime(df["2._ay_tartım_tarihi"], errors="coerce")
 
-df["ay2_agirligi"] = (
-    df["ay2_agirligi"]
-    .str.replace("kg","")
-    .str.replace(",",".")
-    .astype(float)
-)
+# sayısal verileri temizleme
+df["doğum_ağırlığı"] = pd.to_numeric(df["doğum_ağırlığı"], errors="coerce")
+df["2._ay_ağırlığı"] = pd.to_numeric(df["2._ay_ağırlığı"], errors="coerce")
 
 # gün farkı
-df["gun_sayisi"] = (df["tartim_tarihi"] - df["dogum_tarihi"]).dt.days
+df["gun_sayisi"] = (df["2._ay_tartım_tarihi"] - df["doğum_tarihi"]).dt.days
 
-# ADG
+# growth metriği
 df["gunluk_agirlik_artisi"] = (
-    df["ay2_agirligi"] - df["dogum_agirligi"]
+    df["2._ay_ağırlığı"] - df["doğum_ağırlığı"]
 ) / df["gun_sayisi"]
 
 # eksik veri temizleme
 df = df.dropna()
 
-df.to_csv("data/kuzu_clean.csv", index=False)
+# aykırı değer temizleme
+from scipy.stats import zscore
 
-print("Veri temizlendi")
+df = df[(np.abs(zscore(df[["doğum_ağırlığı","2._ay_ağırlığı"]])) < 3).all(axis=1)]
+
+# temiz veri kaydet
+df.to_csv(clean_data, index=False)
+
+print("Temiz veri kaydedildi:", clean_data)
