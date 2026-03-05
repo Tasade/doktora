@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-pip install seaborn
 
-st.title("Kuzu Büyüme Performansı Analizi")
+st.title("Kuzu Büyüme Analizi Dashboard")
 
 df = pd.read_csv("data/kuzu_clean.csv")
 
