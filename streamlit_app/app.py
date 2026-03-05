@@ -145,9 +145,13 @@ RENKLER = {
 }
 TEMA = dict(
     plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
-    font_family="Source Sans 3, sans-serif", font_color="#2d4a22",
-    xaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd"),
-    yaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd"),
+    font_family="Times New Roman", font_color="#000000",
+    xaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd",
+               tickfont=dict(family="Times New Roman", color="#000000"),
+               title_font=dict(family="Times New Roman", color="#000000")),
+    yaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd",
+               tickfont=dict(family="Times New Roman", color="#000000"),
+               title_font=dict(family="Times New Roman", color="#000000")),
 )
 
 # ─────────────────────────────────────────────
