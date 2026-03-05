@@ -2,112 +2,88 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-st.title("Kuzu Büyüme Analizi Dashboard")
+st.title("Kuzu Büyüme Performansı Analizi")
 
-df = pd.read_csv("data/kuzu_clean.csv")
+# dosya yolu
+base_path = Path(__file__).resolve().parent.parent
+data_path = base_path / "scripts" / "kuzu_clean.csv"
 
-st.header("Veri Seti")
+# veri yükleme
+df = pd.read_csv(data_path)
+
+st.subheader("Veri Önizleme")
 st.dataframe(df)
 
-st.header("Temel İstatistikler")
+# temel istatistik
+st.subheader("Temel İstatistikler")
 st.write(df.describe())
 
-# -----------------------------
-# Doğum Ağırlığı Dağılımı
-# -----------------------------
-
+# doğum ağırlığı dağılımı
 st.subheader("Doğum Ağırlığı Dağılımı")
 
 fig, ax = plt.subplots()
-
-sns.histplot(df["dogum_agirligi"], kde=True, ax=ax)
-
+sns.histplot(df["doğum_ağırlığı"], kde=True, ax=ax)
 st.pyplot(fig)
 
-# -----------------------------
-# 2.Ay Ağırlığı
-# -----------------------------
-
-st.subheader("2. Ay Ağırlık Dağılımı")
+# 2. ay ağırlığı
+st.subheader("2. Ay Ağırlığı Dağılımı")
 
 fig, ax = plt.subplots()
-
-sns.histplot(df["ay2_agirligi"], kde=True, ax=ax)
-
+sns.histplot(df["2._ay_ağırlığı"], kde=True, ax=ax)
 st.pyplot(fig)
 
-# -----------------------------
-# Growth Relationship
-# -----------------------------
-
-st.subheader("Doğum Ağırlığı vs 2.Ay Ağırlığı")
+# büyüme ilişkisi
+st.subheader("Doğum Ağırlığı vs 2. Ay Ağırlığı")
 
 fig, ax = plt.subplots()
-
 sns.scatterplot(
-    x=df["dogum_agirligi"],
-    y=df["ay2_agirligi"]
+    x="doğum_ağırlığı",
+    y="2._ay_ağırlığı",
+    data=df,
+    ax=ax
 )
-
 st.pyplot(fig)
 
-# -----------------------------
-# Cinsiyet Etkisi
-# -----------------------------
-
-st.subheader("Cinsiyete Göre 2.Ay Ağırlık")
+# cinsiyet etkisi
+st.subheader("Cinsiyet Etkisi")
 
 fig, ax = plt.subplots()
-
 sns.boxplot(
     x="cinsiyet",
-    y="ay2_agirligi",
-    data=df
+    y="2._ay_ağırlığı",
+    data=df,
+    ax=ax
 )
-
 st.pyplot(fig)
 
-# -----------------------------
-# Doğum Tipi Etkisi
-# -----------------------------
-
-st.subheader("Doğum Tipine Göre 2.Ay Ağırlık")
+# doğum tipi
+st.subheader("Doğum Tipi Analizi")
 
 fig, ax = plt.subplots()
-
 sns.boxplot(
-    x="dogum_tipi",
-    y="ay2_agirligi",
-    data=df
+    x="doğum_tipi",
+    y="2._ay_ağırlığı",
+    data=df,
+    ax=ax
 )
-
 st.pyplot(fig)
 
-# -----------------------------
-# ADG Analizi
-# -----------------------------
-
-st.subheader("Günlük Canlı Ağırlık Artışı (ADG)")
+# ADG analizi
+st.subheader("Günlük Ağırlık Artışı")
 
 fig, ax = plt.subplots()
-
-sns.histplot(df["gunluk_agirlik_artisi"], kde=True)
-
+sns.histplot(df["gunluk_agirlik_artisi"], kde=True, ax=ax)
 st.pyplot(fig)
 
-# -----------------------------
-# Korelasyon
-# -----------------------------
-
+# korelasyon
 st.subheader("Korelasyon Matrisi")
 
 corr = df[
-["dogum_agirligi","ay2_agirligi","gunluk_agirlik_artisi"]
+["doğum_ağırlığı","2._ay_ağırlığı","gunluk_agirlik_artisi"]
 ].corr()
 
 fig, ax = plt.subplots()
-
-sns.heatmap(corr, annot=True)
-
+sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
 st.pyplot(fig)
