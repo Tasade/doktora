@@ -3,19 +3,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-import subprocess
-import sys
 
 # ─────────────────────────────────────────────
-#  PREPROCESS — temiz_veri.csv yoksa otomatik oluştur
-# ─────────────────────────────────────────────
-APP_DIR  = os.path.dirname(os.path.abspath(__file__))   # streamlit_app/
-BASE_DIR = os.path.dirname(APP_DIR)                      # proje kökü (main/)
-PREPROCESS_PATH = os.path.join(BASE_DIR, "scripts", "preprocess.py")
-TEMIZ_VERI_PATH = os.path.join(BASE_DIR, "scripts", "temiz_veri.csv")
-
-# ─────────────────────────────────────────────
-#  SAYFA AYARLARI  (her zaman ilk st.* çağrısı olmalı)
+#  SAYFA AYARLARI  (ilk st.* çağrısı olmalı)
 # ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Kuzu Takip Paneli",
@@ -24,15 +14,77 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-if not os.path.exists(TEMIZ_VERI_PATH):
-    with st.spinner("Veri hazırlanıyor, lütfen bekleyin..."):
-        result = subprocess.run(
-            [sys.executable, PREPROCESS_PATH],
-            capture_output=True, text=True
-        )
-    if result.returncode != 0:
-        st.error(f"Veri ön işleme hatası:\n{result.stderr}")
-        st.stop()
+# ─────────────────────────────────────────────
+#  HAM VERİYİ BUL VE TEMİZLE (dışarıya bağımlılık yok)
+# ─────────────────────────────────────────────
+APP_DIR  = os.path.dirname(os.path.abspath(__file__))  # streamlit_app/
+BASE_DIR = os.path.dirname(APP_DIR)                     # proje kökü
+
+# Ham CSV'yi data/ klasöründe ara
+HAM_CSV = os.path.join(BASE_DIR, "data", "Ahmet_Uçak_Kuzu_Listesi.csv")
+
+
+def kg_temizle(deger):
+    if pd.isna(deger):
+        return None
+    d = str(deger).strip().lower().replace(" kg", "").replace(",", ".")
+    if d in ["öldü", "ölü", "-", "", "nan"]:
+        return None
+    try:
+        return float(d)
+    except ValueError:
+        return None
+
+
+def tarih_temizle(deger):
+    if pd.isna(deger):
+        return None
+    try:
+        return pd.to_datetime(str(deger).strip(), dayfirst=True)
+    except Exception:
+        return None
+
+
+@st.cache_data
+def veri_yukle():
+    df = pd.read_csv(
+        HAM_CSV,
+        sep=";",
+        skiprows=4,
+        encoding="utf-8-sig",
+        on_bad_lines="skip",
+    )
+    df.columns = [
+        "Sira_No", "Kuzu_Kupe_No", "Turkvet_Kupe_No", "Ana_Kupe_No",
+        "Dogum_Tarihi", "Cinsiyet", "Dogum_Tipi",
+        "Dogum_Agirligi_kg", "Ikinci_Ay_Agirligi_kg", "Ikinci_Ay_Tartim_Tarihi",
+    ]
+    # Sadece sayısal sıra no'lu satırlar
+    df = df[pd.to_numeric(df["Sira_No"], errors="coerce").notna()].copy()
+    df["Sira_No"] = df["Sira_No"].astype(int)
+
+    # Temizle
+    df["Dogum_Agirligi_kg"]      = df["Dogum_Agirligi_kg"].apply(kg_temizle)
+    df["Ikinci_Ay_Agirligi_kg"]  = df["Ikinci_Ay_Agirligi_kg"].apply(kg_temizle)
+    df["Dogum_Tarihi"]           = df["Dogum_Tarihi"].apply(tarih_temizle)
+    df["Ikinci_Ay_Tartim_Tarihi"]= df["Ikinci_Ay_Tartim_Tarihi"].apply(tarih_temizle)
+
+    for col in ["Kuzu_Kupe_No", "Turkvet_Kupe_No", "Ana_Kupe_No", "Cinsiyet", "Dogum_Tipi"]:
+        df[col] = df[col].astype(str).str.strip().replace("nan", "")
+
+    # Günlük kazanım
+    df["Gunluk_Kazanim_g"] = (
+        (df["Ikinci_Ay_Agirligi_kg"] - df["Dogum_Agirligi_kg"]) * 1000 / 60
+    ).round(1)
+
+    return df
+
+
+try:
+    df = veri_yukle()
+except FileNotFoundError:
+    st.error(f"Ham veri dosyası bulunamadı:\n`{HAM_CSV}`\n\nLütfen `data/` klasöründe dosyanın var olduğunu kontrol edin.")
+    st.stop()
 
 # ─────────────────────────────────────────────
 #  ÖZEL CSS
@@ -42,7 +94,6 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Source+Sans+3:wght@400;600&display=swap');
 
 [data-testid="stAppViewContainer"] { background: #f5f0e8; }
-
 [data-testid="stSidebar"] { background: #2d4a22 !important; }
 [data-testid="stSidebar"] * { color: #e8dfc8 !important; }
 [data-testid="stSidebar"] .stMultiSelect [data-baseweb="tag"] {
@@ -51,22 +102,16 @@ st.markdown("""
 
 .hero-title {
     font-family: 'Playfair Display', serif;
-    font-size: 2.6rem;
-    color: #2d4a22;
-    line-height: 1.15;
-    margin-bottom: 0;
+    font-size: 2.6rem; color: #2d4a22;
+    line-height: 1.15; margin-bottom: 0;
 }
 .hero-sub {
     font-family: 'Source Sans 3', sans-serif;
-    font-size: 1rem;
-    color: #6b7c5a;
-    margin-top: 4px;
-    letter-spacing: 0.04em;
+    font-size: 1rem; color: #6b7c5a;
+    margin-top: 4px; letter-spacing: 0.04em;
 }
-
 .metric-card {
-    background: #ffffff;
-    border-radius: 12px;
+    background: #ffffff; border-radius: 12px;
     padding: 18px 20px;
     box-shadow: 0 2px 8px rgba(45,74,34,0.08);
     border-left: 4px solid #5a8a3c;
@@ -74,68 +119,33 @@ st.markdown("""
     margin-bottom: 6px;
 }
 .metric-label {
-    font-size: 0.78rem;
-    color: #6b7c5a;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
+    font-size: 0.78rem; color: #6b7c5a;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
 }
 .metric-value {
     font-family: 'Playfair Display', serif;
-    font-size: 2rem;
-    color: #2d4a22;
-    line-height: 1;
+    font-size: 2rem; color: #2d4a22; line-height: 1;
 }
-.metric-sub {
-    font-size: 0.75rem;
-    color: #a0a896;
-    margin-top: 4px;
-}
-
+.metric-sub { font-size: 0.75rem; color: #a0a896; margin-top: 4px; }
 .section-title {
     font-family: 'Playfair Display', serif;
-    font-size: 1.25rem;
-    color: #2d4a22;
+    font-size: 1.25rem; color: #2d4a22;
     border-bottom: 2px solid #c8d9b0;
-    padding-bottom: 6px;
-    margin-bottom: 12px;
-    margin-top: 4px;
+    padding-bottom: 6px; margin-bottom: 12px; margin-top: 4px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  VERİ YÜKLEME
-# ─────────────────────────────────────────────
-DATA_PATH = TEMIZ_VERI_PATH
-
-
-@st.cache_data
-def veri_yukle():
-    df = pd.read_csv(DATA_PATH, encoding="utf-8-sig")
-    df["Dogum_Tarihi"] = pd.to_datetime(df["Dogum_Tarihi"])
-    df["Ikinci_Ay_Tartim_Tarihi"] = pd.to_datetime(df["Ikinci_Ay_Tartim_Tarihi"], errors="coerce")
-    return df
-
-
-df = veri_yukle()
-
-# ─────────────────────────────────────────────
 #  RENK PALETİ & TEMA
 # ─────────────────────────────────────────────
 RENKLER = {
-    "Erkek":  "#2d7d46",
-    "Dişi":   "#c07038",
-    "Tek":    "#5a8a3c",
-    "İkiz":   "#e08c3a",
-    "Üçüz":   "#9b59b6",
+    "Erkek": "#2d7d46", "Dişi": "#c07038",
+    "Tek": "#5a8a3c", "İkiz": "#e08c3a", "Üçüz": "#9b59b6",
 }
-
 TEMA = dict(
-    plot_bgcolor="#ffffff",
-    paper_bgcolor="#ffffff",
-    font_family="Source Sans 3, sans-serif",
-    font_color="#2d4a22",
+    plot_bgcolor="#ffffff", paper_bgcolor="#ffffff",
+    font_family="Source Sans 3, sans-serif", font_color="#2d4a22",
     xaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd"),
     yaxis=dict(showgrid=True, gridcolor="#eeebe4", linecolor="#ddd"),
 )
@@ -146,16 +156,15 @@ TEMA = dict(
 with st.sidebar:
     st.markdown("## 🔍 Filtreler")
     st.markdown("---")
-
     cinsiyet_sec = st.multiselect(
         "Cinsiyet",
-        options=sorted(df["Cinsiyet"].dropna().unique()),
-        default=sorted(df["Cinsiyet"].dropna().unique()),
+        options=sorted(df["Cinsiyet"].replace("", pd.NA).dropna().unique()),
+        default=sorted(df["Cinsiyet"].replace("", pd.NA).dropna().unique()),
     )
     dogum_tipi_sec = st.multiselect(
         "Doğum Tipi",
-        options=sorted(df["Dogum_Tipi"].dropna().unique()),
-        default=sorted(df["Dogum_Tipi"].dropna().unique()),
+        options=sorted(df["Dogum_Tipi"].replace("", pd.NA).dropna().unique()),
+        default=sorted(df["Dogum_Tipi"].replace("", pd.NA).dropna().unique()),
     )
     min_ag = float(df["Dogum_Agirligi_kg"].min())
     max_ag = float(df["Dogum_Agirligi_kg"].max())
@@ -234,12 +243,8 @@ with col1:
             marker=dict(size=4, opacity=0.5),
             fillcolor=RENKLER[cins], line_color=RENKLER[cins], opacity=0.75,
         ))
-    fig.update_layout(
-        **TEMA,
-        title="Cinsiyete Göre 2. Ay Ağırlığı",
-        yaxis_title="2. Ay Ağırlığı (kg)",
-        height=380,
-    )
+    fig.update_layout(**TEMA, title="Cinsiyete Göre 2. Ay Ağırlığı",
+                      yaxis_title="2. Ay Ağırlığı (kg)", height=380)
     st.plotly_chart(fig, use_container_width=True)
 
 with col2:
@@ -299,10 +304,7 @@ st.markdown('<div class="section-title">Zaman İçinde Doğumlar</div>', unsafe_
 col5, col6 = st.columns([2, 1])
 
 with col5:
-    gunluk = (
-        fdf.groupby(["Dogum_Tarihi", "Cinsiyet"])
-        .size().reset_index(name="Adet")
-    )
+    gunluk = fdf.groupby(["Dogum_Tarihi", "Cinsiyet"]).size().reset_index(name="Adet")
     fig = px.bar(
         gunluk, x="Dogum_Tarihi", y="Adet", color="Cinsiyet",
         color_discrete_map=RENKLER,
@@ -319,8 +321,7 @@ with col6:
         tip_say, values="Adet", names="Doğum Tipi",
         color="Doğum Tipi",
         color_discrete_map={"Tek": "#5a8a3c", "İkiz": "#e08c3a", "Üçüz": "#9b59b6"},
-        title="Doğum Tipi Oranı",
-        hole=0.45,
+        title="Doğum Tipi Oranı", hole=0.45,
     )
     fig.update_traces(textinfo="percent+label", textfont_size=13)
     fig.update_layout(**TEMA, height=340, showlegend=False)
@@ -339,8 +340,7 @@ with col7:
         scatter_df,
         x="Dogum_Agirligi_kg", y="Ikinci_Ay_Agirligi_kg",
         color="Cinsiyet", symbol="Dogum_Tipi",
-        trendline="ols",
-        color_discrete_map=RENKLER,
+        trendline="ols", color_discrete_map=RENKLER,
         hover_data=["Kuzu_Kupe_No", "Ana_Kupe_No", "Gunluk_Kazanim_g"],
         labels={
             "Dogum_Agirligi_kg": "Doğum Ağırlığı (kg)",
@@ -370,7 +370,7 @@ with col8:
 st.markdown('<div class="section-title">Ana Bazlı Büyüme Performansı</div>', unsafe_allow_html=True)
 
 ana_df = (
-    fdf[fdf["Ana_Kupe_No"].astype(str).str.strip() != ""]
+    fdf[fdf["Ana_Kupe_No"].astype(str).str.strip().ne("")]
     .groupby("Ana_Kupe_No")
     .agg(
         Kuzu_Sayisi=("Sira_No", "count"),
@@ -398,7 +398,7 @@ fig = px.scatter(
         "Ort_Kazanim": "Günlük Kazanım (g/gün)",
         "Kuzu_Sayisi": "Kuzu Sayısı",
     },
-    title="En İyi 25 Ana — Daire büyüklüğü: kuzu sayısı, renk: günlük kazanım",
+    title="En İyi 25 Ana — Daire büyüklüğü: kuzu sayısı · Renk: günlük kazanım",
 )
 fig.update_layout(**TEMA, height=400, coloraxis_colorbar=dict(title="g/gün"))
 st.plotly_chart(fig, use_container_width=True)
@@ -413,14 +413,9 @@ with st.expander("📋 Filtrelenmiş Veri Tablosu"):
         "Dogum_Tarihi", "Cinsiyet", "Dogum_Tipi",
         "Dogum_Agirligi_kg", "Ikinci_Ay_Agirligi_kg", "Gunluk_Kazanim_g",
     ]].rename(columns={
-        "Sira_No": "Sıra",
-        "Kuzu_Kupe_No": "Küpe No",
-        "Ana_Kupe_No": "Ana Küpe",
-        "Dogum_Tarihi": "Doğum Tarihi",
-        "Cinsiyet": "Cinsiyet",
-        "Dogum_Tipi": "Doğum Tipi",
-        "Dogum_Agirligi_kg": "Doğum Ağ. (kg)",
-        "Ikinci_Ay_Agirligi_kg": "2. Ay Ağ. (kg)",
+        "Sira_No": "Sıra", "Kuzu_Kupe_No": "Küpe No", "Ana_Kupe_No": "Ana Küpe",
+        "Dogum_Tarihi": "Doğum Tarihi", "Cinsiyet": "Cinsiyet", "Dogum_Tipi": "Doğum Tipi",
+        "Dogum_Agirligi_kg": "Doğum Ağ. (kg)", "Ikinci_Ay_Agirligi_kg": "2. Ay Ağ. (kg)",
         "Gunluk_Kazanim_g": "Günlük Kaz. (g)",
     })
     st.dataframe(gorunen.reset_index(drop=True), use_container_width=True, height=350)
