@@ -1,44 +1,90 @@
 import pandas as pd
-import numpy as np
-from pathlib import Path
+import re
+import os
 
-# Dosya yolları
-base_path = Path(__file__).resolve().parent.parent
+# Yollar
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+INPUT_PATH = os.path.join(BASE_DIR, "data", "Ahmet_Uçak_Kuzu_Listesi.csv")
+OUTPUT_PATH = os.path.join(BASE_DIR, "scripts", "temiz_veri.csv")
 
-raw_data = base_path / "data" / "Ahmet Uçak Kuzu Listesi.csv"
-clean_data = base_path / "scripts" / "kuzu_clean.csv"
 
-# Veri yükleme
-df = pd.read_csv(raw_data, sep=",", engine="python")
+def kg_temizle(deger):
+    """'3,1 kg' gibi değerleri float'a çevirir. 'öldü' gibi değerleri NaN yapar."""
+    if pd.isna(deger):
+        return None
+    deger = str(deger).strip().lower()
+    if deger in ["öldü", "ölü", "-", ""]:
+        return None
+    deger = deger.replace(" kg", "").replace(",", ".")
+    try:
+        return float(deger)
+    except ValueError:
+        return None
 
-# kolon isimlerini temizleme
-df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-# tarihleri düzeltme
-df["doğum_tarihi"] = pd.to_datetime(df["doğum_tarihi"], errors="coerce")
-df["2._ay_tartım_tarihi"] = pd.to_datetime(df["2._ay_tartım_tarihi"], errors="coerce")
+def tarih_temizle(deger):
+    """Çeşitli tarih formatlarını standart YYYY-MM-DD'ye çevirir."""
+    if pd.isna(deger):
+        return None
+    try:
+        return pd.to_datetime(str(deger).strip(), dayfirst=True).strftime("%Y-%m-%d")
+    except Exception:
+        return None
 
-# sayısal verileri temizleme
-df["doğum_ağırlığı"] = pd.to_numeric(df["doğum_ağırlığı"], errors="coerce")
-df["2._ay_ağırlığı"] = pd.to_numeric(df["2._ay_ağırlığı"], errors="coerce")
 
-# gün farkı
-df["gun_sayisi"] = (df["2._ay_tartım_tarihi"] - df["doğum_tarihi"]).dt.days
+def main():
+    print("Ham veri okunuyor...")
 
-# growth metriği
-df["gunluk_agirlik_artisi"] = (
-    df["2._ay_ağırlığı"] - df["doğum_ağırlığı"]
-) / df["gun_sayisi"]
+    # İlk 4 satır başlık/meta bilgisi — atla, gerçek başlık 5. satırda
+    df = pd.read_csv(
+        INPUT_PATH,
+        sep=";",
+        skiprows=4,
+        encoding="utf-8-sig",
+        on_bad_lines="skip",
+    )
 
-# eksik veri temizleme
-df = df.dropna()
+    # Sütun isimlerini temizle
+    df.columns = [
+        "Sira_No",
+        "Kuzu_Kupe_No",
+        "Turkvet_Kupe_No",
+        "Ana_Kupe_No",
+        "Dogum_Tarihi",
+        "Cinsiyet",
+        "Dogum_Tipi",
+        "Dogum_Agirligi_kg",
+        "Ikinci_Ay_Agirligi_kg",
+        "Ikinci_Ay_Tartim_Tarihi",
+    ]
 
-# aykırı değer temizleme
-from scipy.stats import zscore
+    # Boş / anlamsız satırları at (Sira_No sayısal olmayan satırlar)
+    df = df[pd.to_numeric(df["Sira_No"], errors="coerce").notna()].copy()
+    df["Sira_No"] = df["Sira_No"].astype(int)
 
-df = df[(np.abs(zscore(df[["doğum_ağırlığı","2._ay_ağırlığı"]])) < 3).all(axis=1)]
+    # Ağırlık sütunlarını temizle
+    df["Dogum_Agirligi_kg"] = df["Dogum_Agirligi_kg"].apply(kg_temizle)
+    df["Ikinci_Ay_Agirligi_kg"] = df["Ikinci_Ay_Agirligi_kg"].apply(kg_temizle)
 
-# temiz veri kaydet
-df.to_csv(clean_data, index=False)
+    # Tarih sütunlarını standartlaştır
+    df["Dogum_Tarihi"] = df["Dogum_Tarihi"].apply(tarih_temizle)
+    df["Ikinci_Ay_Tartim_Tarihi"] = df["Ikinci_Ay_Tartim_Tarihi"].apply(tarih_temizle)
 
-print("Temiz veri kaydedildi:", clean_data)
+    # Metin sütunlarını trim'le
+    for col in ["Kuzu_Kupe_No", "Turkvet_Kupe_No", "Ana_Kupe_No", "Cinsiyet", "Dogum_Tipi"]:
+        df[col] = df[col].astype(str).str.strip().replace("nan", "")
+
+    # Günlük ağırlık kazanımı hesapla
+    df["Gunluk_Kazanim_g"] = (
+        (df["Ikinci_Ay_Agirligi_kg"] - df["Dogum_Agirligi_kg"]) * 1000 / 60
+    ).round(1)
+
+    print(f"Temizlenen kayıt sayısı: {len(df)}")
+    print(df.dtypes)
+
+    df.to_csv(OUTPUT_PATH, index=False, encoding="utf-8-sig")
+    print(f"Temiz veri kaydedildi: {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
